@@ -179,7 +179,7 @@ MECANICAS: list[Mecanica] = [
 
 MECANICAS_BY_NUM: dict[int, Mecanica] = {m.numero: m for m in MECANICAS}
 
-REGIONALES: list[str] = [f"REGIONAL {i}" for i in range(1, 7)]
+REGIONALES: list[str] = [f"REGIONAL {i}" for i in range(1, 7)] + ["CALL CENTER"]
 
 
 def mecanicas_to_rows() -> list[dict]:
