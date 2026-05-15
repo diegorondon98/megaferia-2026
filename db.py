@@ -55,12 +55,21 @@ def fetch_all(table: str, select: str = "*", filters: dict[str, Any] | None = No
     return pd.DataFrame(rows)
 
 
+# PK por tabla — PostgREST exige un filtro en DELETE, así que usamos neq(pk, sentinel)
+# para borrar todo. mecanicas usa `numero`, productos `itemid`, combos/ventas `id`.
+_PK_FOR_DELETE = {
+    "productos": ("itemid", "__never__"),
+    "mecanicas": ("numero", -1),
+    "combos":    ("id", -1),
+    "ventas":    ("id", -1),
+}
+
+
 def replace_table(table: str, rows: list[dict], chunk_size: int = 500) -> int:
     """Borra todo el contenido de la tabla y reinserta `rows`. Devuelve filas escritas."""
     client = get_client()
-    # delete all
-    client.table(table).delete().neq("id", -1).execute() if table != "productos" else \
-        client.table(table).delete().neq("itemid", "__never__").execute()
+    pk_col, sentinel = _PK_FOR_DELETE.get(table, ("id", -1))
+    client.table(table).delete().neq(pk_col, sentinel).execute()
     if not rows:
         return 0
     n = 0
