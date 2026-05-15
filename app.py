@@ -11,9 +11,12 @@ from __future__ import annotations
 
 import io
 import math
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import streamlit as st
+
+EC_TZ = timezone(timedelta(hours=-5))  # Ecuador no observa DST
 
 import data_io
 import db
@@ -42,6 +45,25 @@ def _init_state():
     ss.setdefault("resumen", pd.DataFrame())
     ss.setdefault("lineas", pd.DataFrame())
     ss.setdefault("filter_pedido", "")
+    ss.setdefault("ventas_updated_at", None)  # ISO string (UTC)
+
+
+def _fmt_last_upload(value) -> str:
+    """Convierte timestamp UTC de Supabase a hora Ecuador legible."""
+    if value is None or value == "":
+        return "—"
+    if isinstance(value, str):
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return value
+    elif isinstance(value, datetime):
+        dt = value
+    else:
+        return str(value)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(EC_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _supabase_available() -> bool:
@@ -57,6 +79,7 @@ def _load_from_supabase() -> bool:
         p = db.fetch_all("productos")
         st.session_state.ventas = v
         st.session_state.productos = p
+        st.session_state.ventas_updated_at = db.get_last_upload_at()
         _recompute()
         return True
     except Exception as exc:
@@ -231,12 +254,14 @@ def tab_carga():
             try:
                 df = data_io.read_ventas_excel(vent_file)
                 st.session_state.ventas = df
+                st.session_state.ventas_updated_at = datetime.now(timezone.utc).isoformat()
                 st.success(f"Cargadas {len(df):,} lineas.")
                 _recompute()
                 if _supabase_available():
                     if st.button("☁️ Guardar ventas en Supabase (REEMPLAZA)"):
                         rows = data_io.ventas_to_rows(df)
                         db.replace_table("ventas", rows)
+                        st.session_state.ventas_updated_at = db.get_last_upload_at()
                         st.success("Ventas reemplazadas.")
             except Exception as exc:
                 st.error(f"Error: {exc}")
@@ -269,6 +294,15 @@ def _gate_password() -> bool:
 # ============================================================
 def tab_premios():
     resumen = st.session_state.resumen
+    ts = st.session_state.get("ventas_updated_at")
+    c_left, c_right = st.columns([5, 2])
+    with c_right:
+        st.markdown(
+            f"<div style='text-align:right;color:#6b7280;font-size:0.9em'>"
+            f"📅 Última carga de ventas:<br><b>{_fmt_last_upload(ts)}</b> "
+            f"<span style='font-size:0.85em'>(hora Ecuador)</span></div>",
+            unsafe_allow_html=True,
+        )
     if resumen.empty:
         st.info("Carga ventas + productos en la pestania **Carga**.")
         return

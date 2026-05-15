@@ -95,3 +95,21 @@ def has_connection() -> bool:
         return True
     except Exception:
         return False
+
+
+def get_last_upload_at() -> str | None:
+    """ISO timestamp del MAX(created_at) de ventas, o None si no hay filas."""
+    try:
+        resp = (
+            get_client()
+            .table("ventas")
+            .select("created_at")
+            .order("created_at", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if resp.data:
+            return resp.data[0].get("created_at")
+    except Exception:
+        return None
+    return None
