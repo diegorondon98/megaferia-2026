@@ -242,8 +242,12 @@ def _count_combos_completed(
     v: pd.DataFrame,
     combos: dict[int, dict[str, float]],
 ) -> tuple[dict[str, int], list[dict]]:
-    """Un combo cuenta UNA vez por pedido cuando TODOS los itemids del combo
-    estan en ese pedido con descuento <= max permitido por codigo.
+    """Cuenta cuántos combos completos hay en cada pedido.
+
+    Un combo se "completa" cuando TODOS los itemids requeridos están en el
+    pedido con descuento <= max permitido. El número de combos formados es el
+    mínimo de las cantidades vendidas (con descuento válido) de los items
+    requeridos: si un pedido tiene 2 unidades de cada SKU del combo, cuenta 2.
 
     Devuelve:
       - dict asesor -> total combos completados
@@ -254,39 +258,41 @@ def _count_combos_completed(
     if v.empty:
         return ganados, lineas
 
-    # iterar combos
     for combo_num, codes in combos.items():
         items_combo = set(codes.keys())
-        # filtra solo lineas relevantes
         cand = v[v["itemid"].isin(items_combo)].copy()
         if cand.empty:
             continue
-        # descuento por codigo: debe ser <= max permitido (en fraccion 0..1)
         cand["_max_desc_frac"] = cand["itemid"].map(lambda c: codes[c] / 100.0)
         cand["_ok_desc"] = cand["descuento"] <= cand["_max_desc_frac"]
-        # group por pedido: combo cuenta si todos los items del combo estan presentes
-        # con descuento ok.
+
         for pedido, sub in cand.groupby("pedido"):
-            items_validos = set(sub.loc[sub["_ok_desc"], "itemid"])
-            if items_combo.issubset(items_validos):
-                asesor = sub["asesor"].iloc[0]
-                ganados[asesor] = ganados.get(asesor, 0) + 1
-                for _, r in sub.iterrows():
-                    lineas.append({
-                        "asesor": r["asesor"],
-                        "regional": r["regional"],
-                        "pedido": r["pedido"],
-                        "fecha": r.get("fecha"),
-                        "cliente": r["cliente"],
-                        "ruc": r["ruc"],
-                        "itemid": r["itemid"],
-                        "descripcion": r.get("descripcion"),
-                        "cantidad": r["cantidad"],
-                        "venta_neta": r["venta_neta"],
-                        "descuento": r["descuento"],
-                        "contribucion": 1.0 / max(len(items_combo), 1),
-                        "combo_num": combo_num,
-                    })
+            valid = sub[sub["_ok_desc"]]
+            if not items_combo.issubset(set(valid["itemid"])):
+                continue
+            qty_por_item = valid.groupby("itemid")["cantidad"].sum()
+            n_combos = int(qty_por_item.reindex(list(items_combo)).min())
+            if n_combos <= 0:
+                continue
+            asesor = sub["asesor"].iloc[0]
+            ganados[asesor] = ganados.get(asesor, 0) + n_combos
+            for _, r in sub.iterrows():
+                lineas.append({
+                    "asesor": r["asesor"],
+                    "regional": r["regional"],
+                    "pedido": r["pedido"],
+                    "fecha": r.get("fecha"),
+                    "cliente": r["cliente"],
+                    "ruc": r["ruc"],
+                    "itemid": r["itemid"],
+                    "descripcion": r.get("descripcion"),
+                    "cantidad": r["cantidad"],
+                    "venta_neta": r["venta_neta"],
+                    "descuento": r["descuento"],
+                    "contribucion": float(n_combos) / max(len(items_combo), 1),
+                    "combo_num": combo_num,
+                    "combos_en_pedido": n_combos,
+                })
     return ganados, lineas
 
 
