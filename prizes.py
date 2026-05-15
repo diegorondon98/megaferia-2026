@@ -131,10 +131,13 @@ def calcular_premios(
 
         elif m.tipo == "coverage":
             # Ranking + TOP 1 POR REGIONAL (no global).
+            # Solo cuentan las ventas de productos asignados a ESTA mecánica
+            # (familias ELITE en el catálogo de productos).
             min_per_client = float(m.config.get("min_per_client", m.umbral))
             top_only = int(m.config.get("top_only", 1))
 
-            por_cliente = v.groupby(["regional", "asesor", "cliente"])["venta_neta"].sum().reset_index()
+            sub_mec = ventas_mec[ventas_mec["mec_num"] == m.numero]
+            por_cliente = sub_mec.groupby(["regional", "asesor", "cliente"])["venta_neta"].sum().reset_index()
             calificados = por_cliente[por_cliente["venta_neta"] >= min_per_client]
             counts = (calificados.groupby(["regional", "asesor"])["cliente"]
                       .nunique().to_dict())
