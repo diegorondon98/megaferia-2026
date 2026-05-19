@@ -78,9 +78,14 @@ def calcular_premios(
     resumen_rows: list[dict] = []
     lineas_rows: list[dict] = []
 
-    # asesor -> regional (1:1 esperado, tomamos el mas frecuente)
+    # asesor -> regional (1:1 esperado, tomamos el mas frecuente).
+    # Robusto: si un asesor no tiene ninguna regional válida, cae a "".
+    def _top_regional(s: pd.Series) -> str:
+        vc = s.value_counts()
+        return str(vc.index[0]) if len(vc) else ""
+
     asesor_regional = (
-        v.groupby("asesor")["regional"].agg(lambda s: s.value_counts().index[0]).to_dict()
+        v.groupby("asesor")["regional"].agg(_top_regional).to_dict()
     )
     asesores = sorted(v["asesor"].dropna().unique().tolist())
 

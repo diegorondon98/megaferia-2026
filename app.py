@@ -264,7 +264,9 @@ def tab_carga():
                         st.session_state.ventas_updated_at = db.get_last_upload_at()
                         st.success("Ventas reemplazadas.")
             except Exception as exc:
+                import traceback
                 st.error(f"Error: {exc}")
+                st.code(traceback.format_exc(), language="text")
 
     st.divider()
     if _supabase_available():
